@@ -1,0 +1,25 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 18
+VisualStudioVersion = 18.2.11415.280 d18.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Zarr.NET", "Zarr.NET.csproj", "{FD9435AE-E546-2BAD-6EB8-38123063090D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{FD9435AE-E546-2BAD-6EB8-38123063090D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{FD9435AE-E546-2BAD-6EB8-38123063090D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{FD9435AE-E546-2BAD-6EB8-38123063090D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{FD9435AE-E546-2BAD-6EB8-38123063090D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {02E795D5-111A-4B72-B0D4-C48A428E59B3}
+	EndGlobalSection
+EndGlobal

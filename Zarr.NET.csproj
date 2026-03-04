@@ -5,22 +5,21 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>ZarrNET</RootNamespace>
-    <AssemblyName>ZarrNET</AssemblyName>
+    <RootNamespace>Zarr.NET</RootNamespace>
+    <AssemblyName>Zarr.NET</AssemblyName>
 	<Description>A Zarr reader and writer in .NET</Description>
 	<PackageLicenseExpression>GPL-3.0-only</PackageLicenseExpression>
 	<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	<PackageProjectUrl>https://biologytools.github.io/</PackageProjectUrl>
-	<PackageTags>Biology; Microscopy; Whole-Slide-Image;</PackageTags>
-	<PackageReleaseNotes>First release of Zarr.NET.</PackageReleaseNotes>
+	<PackageTags>Biology; Microscopy; Whole-Slide-Image; Zarr; OME-Zarr; NGFF;</PackageTags>
+	<PackageReleaseNotes>Removed dependency AForge.</PackageReleaseNotes>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	<Authors>Erik Repo</Authors>
 	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-	<Version>0.1.0</Version>
+	<Version>0.1.1</Version>
 	<PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="AForgeBio" Version="2.5.0" />
     <PackageReference Include="K4os.Compression.LZ4" Version="1.3.8" />
     <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
