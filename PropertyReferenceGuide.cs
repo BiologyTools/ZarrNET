@@ -6,7 +6,6 @@ using OmeZarr.Core.OmeZarr;
 using OmeZarr.Core.OmeZarr.Helpers;
 using OmeZarr.Core.OmeZarr.Nodes;
 using OmeZarr.Core.OmeZarr.Coordinates;
-using AForge.Imaging;
 using OmeZarr.Core.OmeZarr.Metadata;
 namespace OmeZarr
 {

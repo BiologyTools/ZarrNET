@@ -1,6 +1,5 @@
 using System.Text;
 using System.Text.Json;
-using AForge;
 using OmeZarr.Core.OmeZarr.Metadata;
 using OmeZarr.Core.Zarr;
 using OmeZarr.Core.Zarr.Store;

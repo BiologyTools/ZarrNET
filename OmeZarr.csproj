@@ -22,8 +22,4 @@
     <!-- System.Text.Json included via net8.0 but pin here for clarity -->
   </ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\AForgeBio\AForgeBio\AForgeBio.csproj" />
-  </ItemGroup>
-
 </Project>
