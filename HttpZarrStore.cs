@@ -129,8 +129,8 @@ public sealed class HttpZarrStore : IZarrStore
         }
         catch (TaskCanceledException ex)
         {
-            throw new TimeoutException(
-                $"HTTP request timed out while reading key '{key}' from {_baseUrl}", ex);
+            _httpClient = CreateDefaultHttpClient();
+            goto A;
         }
     }
 

@@ -20,6 +20,13 @@ public sealed class ZarrArrayMetadata
     public JsonElement?  RawAttributes     { get; }
     public int           ZarrVersion       { get; }   // 2 or 3 — drives chunk key format
 
+    /// <summary>
+    /// Non-null when the codec pipeline contains a sharding_indexed codec.
+    /// In this case, the outer ChunkShape represents the shard shape and
+    /// actual data chunks are the inner chunks within each shard.
+    /// </summary>
+    public ShardingConfig? Sharding { get; internal set; }
+
     public int Rank => Shape.Length;
 
     private ZarrArrayMetadata(

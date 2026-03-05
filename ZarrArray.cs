@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using OmeZarr.Core.Zarr.Codecs;
 using OmeZarr.Core.Zarr.Metadata;
 using OmeZarr.Core.Zarr.Store;
@@ -9,6 +10,11 @@ namespace OmeZarr.Core.Zarr;
 /// Represents a single Zarr v3 array. Knows how to read and write chunks
 /// via the store using the array's codec pipeline and chunk key encoding.
 ///
+/// When sharding is active (Metadata.Sharding is non-null), the outer
+/// ChunkShape represents the shard shape and the actual data granularity
+/// is the inner chunk shape. ReadRegionAsync transparently handles both
+/// cases — callers do not need to know whether sharding is in use.
+///
 /// Does not interpret array contents — that is the responsibility of callers
 /// who know the OME axis semantics.
 /// </summary>
@@ -18,7 +24,8 @@ public sealed class ZarrArray
     private readonly string _arrayPath;   // store-relative path to the array root
     private readonly CodecPipeline _pipeline;
 
-    // Cached derived values — avoid repeated LINQ allocations in hot paths
+    // Effective chunk shape — inner chunk shape when sharding, outer chunk shape otherwise.
+    // This is the granularity at which ReadRegionAsync iterates and assembles data.
     private readonly long[] _chunkShapeLong;
     private readonly long   _chunkElementCount;
 
@@ -31,8 +38,12 @@ public sealed class ZarrArray
         Metadata = metadata;
         _pipeline = CodecFactory.BuildPipeline(metadata);
 
-        _chunkShapeLong = metadata.ChunkShape.Select(s => (long)s).ToArray();
-        _chunkElementCount = metadata.ChunkShape.Aggregate(1L, (acc, s) => acc * s);
+        // When sharding is active, the effective chunk shape is the inner chunk shape.
+        // The outer chunk shape (shard shape) is used only for building store keys.
+        var effectiveChunkShape = metadata.Sharding?.InnerChunkShape ?? metadata.ChunkShape;
+
+        _chunkShapeLong = effectiveChunkShape.Select(s => (long)s).ToArray();
+        _chunkElementCount = effectiveChunkShape.Aggregate(1L, (acc, s) => acc * s);
     }
 
     // -------------------------------------------------------------------------
@@ -74,6 +85,13 @@ public sealed class ZarrArray
         var chunkCoords = EnumerateChunkCoordinates(regionStart, regionEnd);
         var parallelism = maxParallelChunks ?? Environment.ProcessorCount;
 
+        // When sharding is active, cache shard file bytes so that multiple inner
+        // chunks within the same shard don't trigger redundant store reads.
+        // The cache is scoped to this single ReadRegionAsync call.
+        var shardCache = Metadata.Sharding is not null
+            ? new ConcurrentDictionary<string, Task<byte[]?>>(StringComparer.Ordinal)
+            : null;
+
         var options = new ParallelOptions
         {
             MaxDegreeOfParallelism = Math.Max(1, parallelism),
@@ -82,7 +100,7 @@ public sealed class ZarrArray
 
         await Parallel.ForEachAsync(chunkCoords, options, async (chunkCoord, token) =>
         {
-            var chunkData = await ReadChunkAsync(chunkCoord, token).ConfigureAwait(false);
+            var chunkData = await ReadChunkAsync(chunkCoord, shardCache, token).ConfigureAwait(false);
 
             CopyChunkRegionToOutput(
                 chunkCoord,
@@ -139,56 +157,119 @@ public sealed class ZarrArray
     // Chunk reading / writing
     // -------------------------------------------------------------------------
 
-    private async Task<byte[]> ReadChunkAsync(long[] chunkCoord, CancellationToken ct)
+    private async Task<byte[]> ReadChunkAsync(
+        long[] chunkCoord,
+        ConcurrentDictionary<string, Task<byte[]?>>? shardCache,
+        CancellationToken ct)
+    {
+        // Sharded path — chunkCoord addresses an inner chunk, not a shard
+        if (Metadata.Sharding is not null)
+            return await ReadShardedChunkAsync(chunkCoord, shardCache!, ct).ConfigureAwait(false);
+
+        // Non-sharded path — one store key per chunk
+        return await ReadDirectChunkAsync(chunkCoord, ct).ConfigureAwait(false);
+    }
+
+    // -------------------------------------------------------------------------
+    // Non-sharded chunk read
+    // -------------------------------------------------------------------------
+
+    private async Task<byte[]> ReadDirectChunkAsync(long[] chunkCoord, CancellationToken ct)
     {
         var key = BuildChunkKey(chunkCoord);
         var bytes = await _store.ReadAsync(key, ct).ConfigureAwait(false);
 
         if (bytes is null)
-        {
-            // Chunk doesn't exist - return fill value
             return BuildFillValueChunk();
-        }
 
         var decoded = await _pipeline.DecodeAsync(bytes, ct).ConfigureAwait(false);
 
-        // Validate decoded size - must match expected chunk size
-        var expectedBytes = _chunkElementCount * Metadata.DataType.ElementSize;
-        var actualBytes = decoded.Length;
+        return PadOrValidateDecodedChunk(decoded, chunkCoord);
+    }
 
-        if (actualBytes != expectedBytes)
+    // -------------------------------------------------------------------------
+    // Sharded chunk read
+    // -------------------------------------------------------------------------
+
+    /// <summary>
+    /// Reads an inner chunk from within a shard file. The chunkCoord here is
+    /// the global inner-chunk coordinate (based on inner chunk shape). We compute
+    /// which shard it belongs to, fetch that shard (with caching), and extract
+    /// the inner chunk.
+    /// </summary>
+    private async Task<byte[]> ReadShardedChunkAsync(
+        long[] chunkCoord,
+        ConcurrentDictionary<string, Task<byte[]?>> shardCache,
+        CancellationToken ct)
+    {
+        var sharding   = Metadata.Sharding!;
+        var rank       = Metadata.Rank;
+
+        // Compute which shard this inner chunk belongs to, and its position within
+        var shardCoord      = new long[rank];
+        var innerChunkCoord = new long[rank];
+
+        for (int d = 0; d < rank; d++)
         {
-            // Truncated edge chunks: some Zarr implementations write only the valid portion
-            // of edge chunks (no fill-value padding). We must expand them into the full chunk
-            // shape so CopyChunkRegionToOutput can use a consistent stride.
-            //
-            // A flat Array.Copy to offset 0 is only correct when the innermost dimension
-            // is also full width — if ANY dimension is clipped, the decoded rows are narrower
-            // than the nominal chunkShape, and a flat copy produces wrong strides for all
-            // rows after the first, causing black bands at image edges.
-            if (actualBytes < expectedBytes)
-            {
-                int elementSize = Metadata.DataType.ElementSize;
-                var padded = BuildFillValueChunk();
-                var truncatedShape = ComputeTruncatedChunkShape(chunkCoord);
+            var innersPerShard   = sharding.InnerChunksPerShard[d];
+            var globalInnerIndex = chunkCoord[d];
 
-                var expectedTruncatedBytes = ComputeTotalElements(truncatedShape) * elementSize;
-
-                if (actualBytes == (int)expectedTruncatedBytes)
-                    ExpandTruncatedChunk(decoded, truncatedShape, padded, _chunkShapeLong, elementSize);
-                else
-                    Array.Copy(decoded, 0, padded, 0, decoded.Length);  // unknown truncation — best effort
-
-                return padded;
-            }
-
-            throw new InvalidOperationException(
-                $"Decoded chunk at {string.Join(",", chunkCoord)} has {actualBytes} bytes, " +
-                $"expected {expectedBytes} bytes. Chunk shape: [{string.Join(", ", Metadata.ChunkShape)}], " +
-                $"element size: {Metadata.DataType.ElementSize} bytes.");
+            shardCoord[d]      = globalInnerIndex / innersPerShard;
+            innerChunkCoord[d] = globalInnerIndex % innersPerShard;
         }
 
-        return decoded;
+        // Fetch the shard file, using the cache to avoid redundant reads
+        var shardKey   = BuildChunkKey(shardCoord);
+        var shardBytes = await shardCache.GetOrAdd(
+            shardKey,
+            key => _store.ReadAsync(key, ct)
+        ).ConfigureAwait(false);
+
+        if (shardBytes is null)
+            return BuildFillValueChunk();
+
+        // Extract the inner chunk from the shard
+        var innerChunkBytes = await ShardReader.ReadInnerChunkAsync(
+            shardBytes, innerChunkCoord, sharding, ct).ConfigureAwait(false);
+
+        if (innerChunkBytes is null)
+            return BuildFillValueChunk();
+
+        return PadOrValidateDecodedChunk(innerChunkBytes, chunkCoord);
+    }
+
+    // -------------------------------------------------------------------------
+    // Decoded chunk validation / padding (shared by both paths)
+    // -------------------------------------------------------------------------
+
+    private byte[] PadOrValidateDecodedChunk(byte[] decoded, long[] chunkCoord)
+    {
+        var expectedBytes = _chunkElementCount * Metadata.DataType.ElementSize;
+        var actualBytes   = decoded.Length;
+
+        if (actualBytes == expectedBytes)
+            return decoded;
+
+        // Truncated edge chunks: some implementations write only the valid portion
+        if (actualBytes < expectedBytes)
+        {
+            int elementSize    = Metadata.DataType.ElementSize;
+            var padded         = BuildFillValueChunk();
+            var truncatedShape = ComputeTruncatedChunkShape(chunkCoord);
+            var expectedTruncatedBytes = ComputeTotalElements(truncatedShape) * elementSize;
+
+            if (actualBytes == (int)expectedTruncatedBytes)
+                ExpandTruncatedChunk(decoded, truncatedShape, padded, _chunkShapeLong, elementSize);
+            else
+                Array.Copy(decoded, 0, padded, 0, decoded.Length);  // unknown truncation — best effort
+
+            return padded;
+        }
+
+        throw new InvalidOperationException(
+            $"Decoded chunk at {string.Join(",", chunkCoord)} has {actualBytes} bytes, " +
+            $"expected {expectedBytes} bytes. Chunk shape: [{string.Join(", ", _chunkShapeLong)}], " +
+            $"element size: {Metadata.DataType.ElementSize} bytes.");
     }
 
     private async Task WriteChunkAsync(long[] chunkCoord, byte[] decodedData, CancellationToken ct)
@@ -208,7 +289,8 @@ public sealed class ZarrArray
         int elementSize,
         CancellationToken ct)
     {
-        var chunkData = await ReadChunkAsync(chunkCoord, ct).ConfigureAwait(false);
+        // Write path doesn't use shard caching — pass null (non-sharded only for now)
+        var chunkData = await ReadChunkAsync(chunkCoord, shardCache: null, ct).ConfigureAwait(false);
         var chunkOrigin = ComputeChunkOrigin(chunkCoord);
         var clampedStart = ClampToChunk(regionStart, chunkOrigin, _chunkShapeLong, clampToStart: true);
         var clampedEnd = ClampToChunk(regionEnd, chunkOrigin, _chunkShapeLong, clampToStart: false);
@@ -378,7 +460,10 @@ public sealed class ZarrArray
     private IEnumerable<long[]> EnumerateChunkCoordinates(long[] regionStart, long[] regionEnd)
     {
         var rank = Metadata.Rank;
-        var chunkShape = Metadata.ChunkShape;
+
+        // Use inner chunk shape when sharded, outer chunk shape otherwise.
+        // _chunkShapeLong is already set to the effective shape in the constructor.
+        var chunkShape = _chunkShapeLong;
 
         var firstChunk = new long[rank];
         var lastChunkExclusive = new long[rank];
@@ -435,14 +520,15 @@ public sealed class ZarrArray
     {
         var origin = new long[Metadata.Rank];
         for (int d = 0; d < Metadata.Rank; d++)
-            origin[d] = chunkCoord[d] * Metadata.ChunkShape[d];
+            origin[d] = chunkCoord[d] * _chunkShapeLong[d];
         return origin;
     }
 
     /// <summary>
     /// Returns the actual element count per dimension for a chunk at chunkCoord.
-    /// For interior chunks this equals ChunkShape. For edge chunks it is clamped to
-    /// the array extent, matching the layout of truncated edge-chunk files.
+    /// For interior chunks this equals the effective chunk shape. For edge chunks
+    /// it is clamped to the array extent, matching the layout of truncated
+    /// edge-chunk files.
     /// </summary>
     private long[] ComputeTruncatedChunkShape(long[] chunkCoord)
     {
@@ -451,8 +537,8 @@ public sealed class ZarrArray
 
         for (int d = 0; d < rank; d++)
         {
-            var origin = chunkCoord[d] * Metadata.ChunkShape[d];
-            truncated[d] = Math.Min(Metadata.Shape[d] - origin, Metadata.ChunkShape[d]);
+            var origin = chunkCoord[d] * _chunkShapeLong[d];
+            truncated[d] = Math.Min(Metadata.Shape[d] - origin, _chunkShapeLong[d]);
         }
 
         return truncated;
