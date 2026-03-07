@@ -8,6 +8,19 @@ namespace OmeZarr.Core.Zarr.Store;
 /// Supports public S3 buckets, Azure Blob Storage, Google Cloud Storage,
 /// and any HTTP server serving Zarr files.
 ///
+/// Caching strategy:
+///   - Metadata files (.zarray, .zattrs, .zgroup, zarr.json) are cached in a
+///     static ConcurrentDictionary keyed by full URL, shared across all store
+///     instances targeting the same base URL. This eliminates redundant HEAD
+///     and GET requests when callers create short-lived store instances per
+///     tile (e.g. BioImage.OpenURL reopening the dataset on each pan).
+///   - Chunk data is cached in a static ChunkLruCache (per base URL) with a
+///     256 MB LRU budget, so panning back over previously-visible tiles hits
+///     RAM instead of the network.
+///   - Existence probes (HEAD results) are cached statically so that the
+///     v3-then-v2 probing in ZarrGroup.OpenArrayAsync/OpenRootAsync does
+///     not repeat on every open.
+///
 /// Note: Listing is limited - requires consolidated metadata (.zmetadata)
 /// or works only with explicit path navigation.
 /// </summary>
@@ -25,11 +38,43 @@ public sealed class HttpZarrStore : IZarrStore
     /// </summary>
     public const int DefaultMaxConnectionsPerServer = 48;
 
-    // Cache for frequently accessed metadata files.
-    // Uses ConcurrentDictionary to avoid lock contention on concurrent chunk reads.
-    private readonly ConcurrentDictionary<string, byte[]?> _metadataCache = new();
+    // =====================================================================
+    // Static shared caches — keyed by normalised base URL
+    // =====================================================================
+    //
+    // When an external library (e.g. BioLib's BioImage.OpenURL) creates a
+    // new OmeZarrReader → HttpZarrStore per tile request, instance-level
+    // caches are useless because they die with each store instance. Static
+    // caches keyed by base URL let every store that points at the same
+    // dataset share a single pool of already-fetched metadata and chunks.
+
+    /// <summary>
+    /// Metadata cache shared across all HttpZarrStore instances.
+    /// Key = "baseUrl | storeRelativeKey", value = file bytes (null for 404).
+    /// Metadata files are small and rarely change, so they live here forever
+    /// (bounded only by the number of distinct arrays opened).
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, byte[]?> s_metadataCache = new();
+
+    /// <summary>
+    /// Chunk data caches, one per base URL. Each is a 256 MB LRU cache.
+    /// Using ConcurrentDictionary to lazily create one cache per dataset.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, ChunkLruCache> s_chunkCaches = new();
+
+    /// <summary>
+    /// Existence-probe cache shared across all instances.
+    /// Key = "baseUrl | storeRelativeKey", value = true (exists) / false (404).
+    /// Prevents repeated HEAD requests for the same v3/v2 probing pattern
+    /// that ZarrGroup.OpenArrayAsync and OpenRootAsync perform on every call.
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, bool> s_existsCache = new();
 
     public string BaseUrl => _baseUrl;
+
+    // =====================================================================
+    // Construction
+    // =====================================================================
 
     /// <summary>
     /// Creates an HTTP Zarr store with a new HttpClient configured for
@@ -75,31 +120,45 @@ public sealed class HttpZarrStore : IZarrStore
         return new HttpClient(handler);
     }
 
-    // -------------------------------------------------------------------------
-    // IZarrStore
-    // -------------------------------------------------------------------------
+    // =====================================================================
+    // IZarrStore — ReadAsync
+    // =====================================================================
 
     public async Task<byte[]?> ReadAsync(string key, CancellationToken ct = default)
     {
         A:
         ThrowIfDisposed();
 
-        // Check cache for metadata files
-        if (IsMetadataKey(key) && _metadataCache.TryGetValue(key, out var cached))
-            return cached;
+        var cacheKey = BuildCacheKey(key);
+
+        // Fast path — metadata cache (small files, kept forever)
+        if (IsMetadataKey(key) && s_metadataCache.TryGetValue(cacheKey, out var cachedMeta))
+            return cachedMeta;
+
+        // Fast path — chunk cache (large files, LRU-evicted)
+        if (!IsMetadataKey(key))
+        {
+            var cachedChunk = GetChunkCache().TryGet(key);
+            if (cachedChunk is not null)
+                return cachedChunk;
+        }
 
         var url = BuildUrl(key);
 
         try
         {
+            if (_httpClient.BaseAddress == null)
+                CreateDefaultHttpClient();
             var response = await _httpClient.GetAsync(url, ct).ConfigureAwait(false);
             System.Diagnostics.Debug.WriteLine(
     $"[HttpZarrStore] GET {url} → {(int)response.StatusCode} {response.StatusCode}");
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
-                // Cache negative result for metadata
                 if (IsMetadataKey(key))
-                    _metadataCache[key] = null;
+                    s_metadataCache[cacheKey] = null;
+
+                // Record negative existence so ExistsAsync won't HEAD again
+                s_existsCache[cacheKey] = false;
 
                 return null;
             }
@@ -108,15 +167,20 @@ public sealed class HttpZarrStore : IZarrStore
 
             var data = await response.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
 
-            // Cache metadata files
+            // Record positive existence
+            s_existsCache[cacheKey] = true;
+
             if (IsMetadataKey(key))
-                _metadataCache[key] = data;
+                s_metadataCache[cacheKey] = data;
+            else
+                GetChunkCache().Set(key, data);
 
             return data;
         }
-        catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        catch (HttpRequestException ex) when (ex.StatusCode == null)
         {
-            return null;
+            _httpClient = CreateDefaultHttpClient();
+            goto A;
         }
         catch (TaskCanceledException) when (ct.IsCancellationRequested)
         {
@@ -134,24 +198,35 @@ public sealed class HttpZarrStore : IZarrStore
         }
     }
 
-    public async Task WriteAsync(string key, byte[] data, CancellationToken ct = default)
-    {
-        ThrowIfDisposed();
-
-        // HTTP stores are typically read-only
-        // For write support, would need PUT/POST with authentication
-        throw new NotSupportedException(
-            "Writing to HTTP Zarr stores is not supported. " +
-            "HTTP stores are read-only. Use LocalFileSystemStore for write operations.");
-    }
+    // =====================================================================
+    // IZarrStore — ExistsAsync
+    // =====================================================================
 
     public async Task<bool> ExistsAsync(string key, CancellationToken ct = default)
     {
         ThrowIfDisposed();
 
-        // Check cache first
-        if (IsMetadataKey(key) && _metadataCache.TryGetValue(key, out var cached))
-            return cached is not null;
+        var cacheKey = BuildCacheKey(key);
+
+        // Check the shared existence cache first — covers both metadata and chunks
+        if (s_existsCache.TryGetValue(cacheKey, out var exists))
+            return exists;
+
+        // A previous ReadAsync may have populated the metadata cache without
+        // an explicit ExistsAsync call. Derive existence from that.
+        if (IsMetadataKey(key) && s_metadataCache.TryGetValue(cacheKey, out var cachedMeta))
+        {
+            var result = cachedMeta is not null;
+            s_existsCache[cacheKey] = result;
+            return result;
+        }
+
+        // A previous ReadAsync may have cached chunk data
+        if (!IsMetadataKey(key) && GetChunkCache().TryGet(key) is not null)
+        {
+            s_existsCache[cacheKey] = true;
+            return true;
+        }
 
         var url = BuildUrl(key);
 
@@ -162,10 +237,16 @@ public sealed class HttpZarrStore : IZarrStore
             var headResponse = await _httpClient.SendAsync(headRequest, ct).ConfigureAwait(false);
 
             if (headResponse.IsSuccessStatusCode)
+            {
+                s_existsCache[cacheKey] = true;
                 return true;
+            }
 
             if (headResponse.StatusCode == HttpStatusCode.NotFound)
+            {
+                s_existsCache[cacheKey] = false;
                 return false;
+            }
 
             // HEAD returned a non-success, non-404 status (e.g. 403, 405).
             // Some S3/Ceph implementations return 403 Forbidden for HEAD on
@@ -185,11 +266,15 @@ public sealed class HttpZarrStore : IZarrStore
             rangeRequest.Headers.Range = new System.Net.Http.Headers.RangeHeaderValue(0, 0);
             var rangeResponse = await _httpClient.SendAsync(rangeRequest, ct).ConfigureAwait(false);
 
-            return rangeResponse.IsSuccessStatusCode
+            var rangeExists = rangeResponse.IsSuccessStatusCode
                 || rangeResponse.StatusCode == HttpStatusCode.PartialContent;
+
+            s_existsCache[cacheKey] = rangeExists;
+            return rangeExists;
         }
         catch (HttpRequestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
+            s_existsCache[cacheKey] = false;
             return false;
         }
         catch (TaskCanceledException) when (ct.IsCancellationRequested)
@@ -203,18 +288,22 @@ public sealed class HttpZarrStore : IZarrStore
         }
     }
 
-    public async Task<IReadOnlyList<string>> ListAsync(string prefix = "", CancellationToken ct = default)
+    // =====================================================================
+    // IZarrStore — Write / List / Delete (unchanged)
+    // =====================================================================
+
+    public async Task WriteAsync(string key, byte[] data, CancellationToken ct = default)
     {
         ThrowIfDisposed();
 
-        // HTTP stores don't have a standard way to list keys
-        // We'd need either:
-        // 1. Consolidated metadata (.zmetadata file - Zarr v2)
-        // 2. Directory index (not standardized)
-        // 3. S3 ListObjects API (requires AWS SDK)
+        throw new NotSupportedException(
+            "Writing to HTTP Zarr stores is not supported. " +
+            "HTTP stores are read-only. Use LocalFileSystemStore for write operations.");
+    }
 
-        // For now, return empty list - navigation works via explicit paths
-        // Users should use HasChildAsync and explicit path navigation
+    public async Task<IReadOnlyList<string>> ListAsync(string prefix = "", CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
 
         throw new NotSupportedException(
             "Listing keys in HTTP Zarr stores is not supported. " +
@@ -231,9 +320,28 @@ public sealed class HttpZarrStore : IZarrStore
             "HTTP stores are read-only.");
     }
 
-    // -------------------------------------------------------------------------
-    // Helpers
-    // -------------------------------------------------------------------------
+    // =====================================================================
+    // Cache key helpers
+    // =====================================================================
+
+    /// <summary>
+    /// Builds a globally-unique cache key by combining the base URL with the
+    /// store-relative key. This ensures stores pointing at different datasets
+    /// don't collide in the shared static caches.
+    /// </summary>
+    private string BuildCacheKey(string storeRelativeKey)
+        => string.Concat(_baseUrl, " | ", storeRelativeKey);
+
+    /// <summary>
+    /// Returns the shared chunk LRU cache for this store's base URL.
+    /// Creates one on first access (one 256 MB budget per distinct dataset).
+    /// </summary>
+    private ChunkLruCache GetChunkCache()
+        => s_chunkCaches.GetOrAdd(_baseUrl, _ => new ChunkLruCache());
+
+    // =====================================================================
+    // URL / key helpers
+    // =====================================================================
 
     private string BuildUrl(string key)
     {
@@ -254,9 +362,9 @@ public sealed class HttpZarrStore : IZarrStore
             || key.EndsWith(".zmetadata", StringComparison.OrdinalIgnoreCase);
     }
 
-    // -------------------------------------------------------------------------
+    // =====================================================================
     // Disposal
-    // -------------------------------------------------------------------------
+    // =====================================================================
 
     public ValueTask DisposeAsync()
     {
@@ -267,6 +375,10 @@ public sealed class HttpZarrStore : IZarrStore
 
         if (_ownsHttpClient)
             _httpClient?.Dispose();
+
+        // Static caches are intentionally NOT cleared on dispose — they
+        // outlive individual store instances so the next store that opens
+        // the same URL benefits from already-fetched data.
 
         return ValueTask.CompletedTask;
     }
