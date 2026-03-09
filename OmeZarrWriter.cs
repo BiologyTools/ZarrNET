@@ -50,17 +50,26 @@ public class BioImageDescriptor(
 // =============================================================================
 
 /// <summary>
-/// Creates a new OME-Zarr v3 dataset on disk and writes pixel data into it.
+/// Creates a new OME-Zarr v3 dataset and writes pixel data into it.
+///
+/// Supports writing to any IZarrStore backend: local filesystem, S3,
+/// or custom stores.
 ///
 /// Writing always goes through two phases:
 ///   1. Bootstrap — write zarr.json metadata for the root group and each array.
 ///   2. Fill — open the bootstrapped arrays and stream pixel data in.
 ///
-/// Usage:
+/// Usage (local):
 /// <code>
 ///   var descriptor = new BioImageDescriptor { SizeY = 1024, SizeX = 1024, ... };
+///   await using var writer = await OmeZarrWriter.CreateAsync("/path/to/output.zarr", descriptor);
+///   await writer.WritePixelDataAsync(pixelBytes);
+/// </code>
 ///
-///   await using var writer = OmeZarrWriter.Create("/path/to/output.zarr", descriptor);
+/// Usage (S3):
+/// <code>
+///   var store = new S3ZarrStore("s3://my-bucket/output.zarr", accessKey, secretKey, region);
+///   await using var writer = await OmeZarrWriter.CreateAsync(store, descriptor);
 ///   await writer.WritePixelDataAsync(pixelBytes);
 /// </code>
 /// </summary>
@@ -93,6 +102,25 @@ public sealed class OmeZarrWriter : IAsyncDisposable
         Directory.CreateDirectory(outputPath);
 
         var store  = new LocalFileSystemStore(outputPath);
+        var writer = new OmeZarrWriter(store, descriptor);
+
+        await writer.BootstrapMetadataAsync(ct).ConfigureAwait(false);
+
+        return writer;
+    }
+
+    /// <summary>
+    /// Creates OME-Zarr metadata in the provided store and returns a writer
+    /// ready to receive pixel data. Use this overload to write directly to
+    /// S3 or any other IZarrStore backend without local staging.
+    ///
+    /// The writer takes ownership of the store and will dispose it.
+    /// </summary>
+    public static async Task<OmeZarrWriter> CreateAsync(
+        IZarrStore          store,
+        BioImageDescriptor  descriptor,
+        CancellationToken   ct = default)
+    {
         var writer = new OmeZarrWriter(store, descriptor);
 
         await writer.BootstrapMetadataAsync(ct).ConfigureAwait(false);

@@ -72,7 +72,9 @@ public sealed class OmeZarrReader : IAsyncDisposable
     /// - HTTP/HTTPS URLs (e.g., "https://example.com/data.zarr")
     /// - S3 URLs via HTTP (e.g., "https://s3.amazonaws.com/bucket/data.zarr")
     /// - S3 native URIs (e.g., "s3://bucket-name/data.zarr") — uses AWS SDK
-    ///   with default credential chain (env vars → ~/.aws/credentials → IAM role)
+    ///   with default credential chain or anonymous fallback
+    /// - S3-compatible URIs (e.g., "s3://idr/zarr/v0.4/...") — auto-routes
+    ///   known buckets to their correct endpoint (EBI Embassy Cloud, etc.)
     /// </summary>
     public static async Task<OmeZarrReader> OpenAsync(
         string            pathOrUrl,
@@ -139,15 +141,11 @@ public sealed class OmeZarrReader : IAsyncDisposable
     // -------------------------------------------------------------------------
 
     /// <summary>
-    /// Well-known S3-compatible service endpoints used in the bioimaging
-    /// community. Keyed by the bucket name that appears in the s3:// URI
-    /// convention for each provider.
+    /// Well-known S3-compatible endpoints used in the bioimaging community.
+    /// Keyed by the bucket name that appears in the s3:// URI convention.
     ///
-    /// For example, IDR data is conventionally referenced as
-    /// "s3://idr/zarr/v0.4/..." but the actual endpoint is at
-    /// s3.embassy.ebi.ac.uk, not amazonaws.com.
-    ///
-    /// Add entries here as new S3-compatible hosts are encountered.
+    /// For example, IDR data is referenced as "s3://idr/zarr/v0.4/..."
+    /// but the actual endpoint is https://uk1s3.embassy.ebi.ac.uk.
     /// </summary>
     private static readonly Dictionary<string, string> KnownS3Endpoints = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -164,16 +162,14 @@ public sealed class OmeZarrReader : IAsyncDisposable
             var bucketName = S3ZarrStore.ParseBucketName(pathOrUrl);
 
             // Check if this bucket maps to a known S3-compatible endpoint
-            // (e.g. "idr" → s3.embassy.ebi.ac.uk). If so, use the custom
-            // endpoint constructor rather than AWS S3.
             if (KnownS3Endpoints.TryGetValue(bucketName, out var serviceUrl))
                 return new S3ZarrStore(pathOrUrl, serviceUrl);
 
-            // Default: treat as an AWS S3 bucket with region auto-detection
+            // Default: AWS S3 with region auto-detection
             return new S3ZarrStore(pathOrUrl);
         }
 
-        // http:// and https:// — generic HTTP store (public S3, Azure, GCS, etc.)
+        // http:// and https:// — generic HTTP store
         if (Uri.TryCreate(pathOrUrl, UriKind.Absolute, out var uri))
         {
             if (uri.Scheme == "http" || uri.Scheme == "https")
