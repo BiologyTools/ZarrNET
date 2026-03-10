@@ -6,7 +6,7 @@ A high-performance, fully async C# library for reading and writing OME-Zarr data
 
 ✅ **Zarr v2 & v3 Support** - Automatic version detection and handling  
 ✅ **OME-Zarr 0.4 & 0.5** - Full spec compliance for multiscale images, labels, and HCS plates  
-✅ **Remote Access** - Read from HTTP/HTTPS, S3, Azure Blob, Google Cloud Storage  
+✅ **Remote Access** - Read from HTTP/HTTPS, S3  
 ✅ **Physical Coordinates** - ROI reading in real-world units (micrometers, seconds, etc.)  
 ✅ **Compression** - Gzip, Zstandard (zstd) codec support  
 ✅ **Memory Efficient** - Chunk-level reading with streaming support  
@@ -17,7 +17,7 @@ A high-performance, fully async C# library for reading and writing OME-Zarr data
 ## Installation
 
 ```bash
-# Via NuGet (when published)
+# Via NuGet
 dotnet add package ZarrNET
 
 # Or clone and build locally
@@ -30,7 +30,7 @@ dotnet build
 
 - .NET 10.0 or higher
 - ZstdSharp.Port (managed zstd implementation)
-- System.Text.Json (included in .NET 8.0)
+- System.Text.Json
 - AWS SDK S3 (for S3 zarr files)
 
 ## Quick Start
@@ -80,10 +80,6 @@ await using var reader = await OmeZarrReader.OpenAsync(httpUrl);
 // S3 public bucket
 var s3Url = "https://s3.amazonaws.com/bucket/image.zarr";
 await using var s3Reader = await OmeZarrReader.OpenAsync(s3Url);
-
-// Azure Blob Storage
-var azureUrl = "https://account.blob.core.windows.net/container/image.zarr";
-await using var azureReader = await OmeZarrReader.OpenAsync(azureUrl);
 
 // Works exactly the same as local files
 var image = reader.AsMultiscaleImage();
