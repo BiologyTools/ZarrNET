@@ -1,7 +1,7 @@
 using System.Text.Json;
-using OmeZarr.Core.Zarr.Codecs;
+using ZarrNET;
 
-namespace OmeZarr.Core.Zarr.Metadata;
+namespace ZarrNET;
 
 /// <summary>
 /// Typed metadata for a Zarr array node.

@@ -1,6 +1,7 @@
-using OmeZarr.Core.OmeZarr;
-using OmeZarr.Core.OmeZarr.Coordinates;
-namespace OmeZarr
+using ZarrNET;
+using ZarrNET.Core.OmeZarr.Coordinates;
+using ZarrNET.Core;
+namespace ZarrNET
 {
     public static class DiagnosticHelper
     {

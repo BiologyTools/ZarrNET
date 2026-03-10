@@ -1,6 +1,6 @@
-using OmeZarr.Core.OmeZarr.Metadata;
+using ZarrNET.Core.OmeZarr.Metadata;
 
-namespace OmeZarr.Core.OmeZarr.Nodes;
+namespace ZarrNET.Core.OmeZarr.Nodes;
 
 /// <summary>
 /// The result of reading a data region from a resolution level.

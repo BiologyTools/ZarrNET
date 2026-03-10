@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace OmeZarr.Core.OmeZarr.Metadata;
+namespace ZarrNET.Core.OmeZarr.Metadata;
 
 // =============================================================================
 // Multiscale image metadata

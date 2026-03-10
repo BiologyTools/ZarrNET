@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace OmeZarr.Core
+namespace ZarrNET.Core
 {
     public struct ZCT
     {

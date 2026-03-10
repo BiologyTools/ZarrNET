@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.OmeZarr.Coordinates;
+namespace ZarrNET.Core.OmeZarr.Coordinates;
 
 /// <summary>
 /// A region of interest expressed in physical units (e.g. micrometers).

@@ -1,6 +1,7 @@
-using OmeZarr.Core.OmeZarr;
-using OmeZarr.Core.Zarr.Store;
-namespace OmeZarr
+using ZarrNET;
+using ZarrNET.Core.Zarr.Store;
+using ZarrNET.Core;
+namespace ZarrNET
 {
     public static class DiagnoseChunks
     {

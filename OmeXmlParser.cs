@@ -1,6 +1,6 @@
 using System.Xml.Linq;
 
-namespace OmeZarr.Core.OmeZarr.Metadata;
+namespace ZarrNET.Core.OmeZarr.Metadata;
 
 /// <summary>
 /// Parses METADATA.ome.xml files found in bioformats2raw.layout datasets.

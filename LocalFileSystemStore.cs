@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Store;
+namespace ZarrNET.Core.Zarr.Store;
 
 /// <summary>
 /// IZarrStore backed by the local filesystem. Keys map directly to

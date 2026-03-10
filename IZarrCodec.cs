@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// A single step in a Zarr v3 codec pipeline. Codecs are applied in order

@@ -1,7 +1,7 @@
-using OmeZarr.Core.Zarr.Metadata;
-using OmeZarr.Core.Zarr.Store;
+using ZarrNET;
+using ZarrNET.Core.Zarr.Store;
 
-namespace OmeZarr.Core.Zarr;
+namespace ZarrNET.Core.Zarr;
 
 /// <summary>
 /// Represents a Zarr v3 group node. Provides navigation to child groups

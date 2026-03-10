@@ -1,6 +1,6 @@
 using ZstdSharp;
 
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// Zstandard bytes-to-bytes codec. Uses ZstdSharp (managed wrapper around

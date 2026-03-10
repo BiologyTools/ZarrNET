@@ -1,8 +1,8 @@
 using System.Buffers.Binary;
-using OmeZarr.Core.Zarr.Metadata;
-using OmeZarr.Core.Zarr.Store;
+using ZarrNET;
+using ZarrNET.Core.Zarr.Store;
 
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// Configuration for a sharding_indexed codec parsed from zarr.json.

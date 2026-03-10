@@ -2,12 +2,14 @@
 // Quick Reference - Property Access Guide
 // =============================================================================
 
-using OmeZarr.Core.OmeZarr;
-using OmeZarr.Core.OmeZarr.Helpers;
+using ZarrNET;
+using ZarrNET.Core.OmeZarr;
+using ZarrNET.Core.OmeZarr.Coordinates;
+using ZarrNET.Core.OmeZarr.Metadata;
 using OmeZarr.Core.OmeZarr.Nodes;
-using OmeZarr.Core.OmeZarr.Coordinates;
-using OmeZarr.Core.OmeZarr.Metadata;
-namespace OmeZarr
+using ZarrNET.Core;
+using OmeZarr.Core.OmeZarr.Helpers;
+namespace ZarrNET
 {
     public class PropertyReferanceGuide()
     {
@@ -54,7 +56,7 @@ namespace OmeZarr
             // Extract data:
             ushort[,] pixels2D = plane.As2DArray<ushort>();
             ushort[] pixels1D = plane.As1DArray<ushort>();
-            byte[] bytes = plane.ToBytes<ushort>(PixelFormat.Gray8);
+            byte[] bytes = plane.ToBytes<ushort>(OmeZarr.Core.OmeZarr.Helpers.PixelFormat.Gray8);
 
             // =============================================================================
             // RegionResult - Multi-dimensional region (may not be 2D)

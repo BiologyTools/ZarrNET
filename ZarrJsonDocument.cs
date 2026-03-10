@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OmeZarr.Core.Zarr.Metadata;
+namespace ZarrNET;
 
 /// <summary>
 /// Raw deserialisation of a zarr.json node document (Zarr v3 spec).

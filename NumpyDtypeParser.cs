@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Metadata;
+namespace ZarrNET;
 
 /// <summary>
 /// Parses numpy-style dtype strings used in Zarr v2.
@@ -10,7 +10,7 @@ namespace OmeZarr.Core.Zarr.Metadata;
 /// </summary>
 public static class NumpyDtypeParser
 {
-    public static (ZarrDataType DataType, Codecs.ByteOrder ByteOrder) Parse(string dtype)
+    public static (ZarrDataType DataType, ByteOrder ByteOrder) Parse(string dtype)
     {
         if (string.IsNullOrEmpty(dtype) || dtype.Length < 2)
             throw new ArgumentException($"Invalid numpy dtype string: '{dtype}'");
@@ -32,16 +32,16 @@ public static class NumpyDtypeParser
     // Helpers
     // -------------------------------------------------------------------------
 
-    private static Codecs.ByteOrder ParseByteOrder(char byteOrderChar)
+    private static ByteOrder ParseByteOrder(char byteOrderChar)
     {
         return byteOrderChar switch
         {
-            '<' => Codecs.ByteOrder.LittleEndian,
-            '>' => Codecs.ByteOrder.BigEndian,
-            '|' => Codecs.ByteOrder.LittleEndian,  // byte-order not applicable (e.g. uint8)
+            '<' => ByteOrder.LittleEndian,
+            '>' => ByteOrder.BigEndian,
+            '|' => ByteOrder.LittleEndian,  // byte-order not applicable (e.g. uint8)
             '=' => BitConverter.IsLittleEndian
-                    ? Codecs.ByteOrder.LittleEndian
-                    : Codecs.ByteOrder.BigEndian,   // native byte order
+                    ? ByteOrder.LittleEndian
+                    : ByteOrder.BigEndian,   // native byte order
             _   => throw new NotSupportedException(
                        $"Unsupported byte order character: '{byteOrderChar}'")
         };

@@ -6,9 +6,9 @@ A high-performance, fully async C# library for reading and writing OME-Zarr data
 
 ✅ **Zarr v2 & v3 Support** - Automatic version detection and handling  
 ✅ **OME-Zarr 0.4 & 0.5** - Full spec compliance for multiscale images, labels, and HCS plates  
-✅ **Remote Access** - Read from HTTP/HTTPS, S3, Azure Blob, Google Cloud Storage  
+✅ **Remote Access** - Read from HTTP/HTTPS, S3 
 ✅ **Physical Coordinates** - ROI reading in real-world units (micrometers, seconds, etc.)  
-✅ **Compression** - Gzip, Zstandard (zstd) codec support  
+✅ **Compression** - Blosc, Gzip, Zstandard (zstd) codec support  
 ✅ **Memory Efficient** - Chunk-level reading with streaming support  
 ✅ **Type Safe** - Strongly typed metadata models and coordinate transformations  
 ✅ **Cross-Platform** - .NET 10.0, works on Windows, Linux, macOS  

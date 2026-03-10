@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.OmeZarr.Metadata;
+namespace ZarrNET.Core.OmeZarr.Metadata;
 
 // =============================================================================
 // OME-XML metadata (from METADATA.ome.xml in bioformats2raw datasets)

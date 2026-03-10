@@ -1,6 +1,6 @@
-using OmeZarr.Core.OmeZarr.Metadata;
+using ZarrNET.Core.OmeZarr.Metadata;
 
-namespace OmeZarr.Core.OmeZarr.Coordinates;
+namespace ZarrNET.Core.OmeZarr.Coordinates;
 
 /// <summary>
 /// Converts between physical coordinate space (ROI in microns, etc.) and

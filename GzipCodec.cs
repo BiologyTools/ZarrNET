@@ -1,6 +1,6 @@
 using System.IO.Compression;
 
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// Gzip bytes-to-bytes codec. Wraps System.IO.Compression — no native dependencies.

@@ -1,10 +1,10 @@
 using System.Buffers;
 using System.Collections.Concurrent;
-using OmeZarr.Core.Zarr.Codecs;
-using OmeZarr.Core.Zarr.Metadata;
-using OmeZarr.Core.Zarr.Store;
+using ZarrNET;
+using ZarrNET;
+using ZarrNET.Core.Zarr.Store;
 
-namespace OmeZarr.Core.Zarr;
+namespace ZarrNET.Core.Zarr;
 
 /// <summary>
 /// Represents a single Zarr v3 array. Knows how to read and write chunks

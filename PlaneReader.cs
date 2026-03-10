@@ -1,5 +1,6 @@
-using OmeZarr.Core.OmeZarr.Coordinates;
 using OmeZarr.Core.OmeZarr.Nodes;
+using ZarrNET.Core.OmeZarr.Coordinates;
+using ZarrNET.Core.OmeZarr.Nodes;
 
 namespace OmeZarr.Core.OmeZarr.Helpers;
 
@@ -84,6 +85,13 @@ public static class PlaneReader
         int? t = 0,
         CancellationToken ct = default)
     {
+        if (tileSizeX <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(tileSizeX), tileSizeX, "Tile width must be > 0.");
+        if (tileSizeY <= 0)
+            throw new ArgumentOutOfRangeException(
+                nameof(tileSizeY), tileSizeY, "Tile height must be > 0.");
+
         var axes = level.EffectiveAxes;
         var shape = level.Shape;
 
@@ -127,6 +135,19 @@ public static class PlaneReader
                     end[i] = shape[i];
                     break;
             }
+        }
+
+        // Validate that every axis has a positive extent. This catches two
+        // problems at once: (a) the stored shape has a zero dimension (writer
+        // bug) and (b) the tile origin is beyond the array extent.
+        for (int i = 0; i < axes.Length; i++)
+        {
+            if (end[i] <= start[i])
+                throw new ArgumentException(
+                    $"Tile region is empty on the '{axes[i].Name}' axis " +
+                    $"(start={start[i]}, end={end[i]}, shape={shape[i]}). " +
+                    $"The tile origin may be outside the image extent, " +
+                    $"or the array shape has a zero-sized dimension.");
         }
 
         var region = new PixelRegion(start, end);
@@ -278,7 +299,7 @@ public static class PlaneReader
 public sealed class PlaneResult
 {
     private readonly RegionResult _regionResult;
-    private readonly OmeZarr.Metadata.AxisMetadata[] _axes;
+    private readonly ZarrNET.Core.OmeZarr.Metadata.AxisMetadata[] _axes;
 
     public byte[] Data => _regionResult.Data;
     public long[] Shape => _regionResult.Shape;
@@ -288,7 +309,7 @@ public sealed class PlaneResult
 
     internal PlaneResult(
         RegionResult regionResult,
-        Metadata.AxisMetadata[] axes)
+        ZarrNET.Core.OmeZarr.Metadata.AxisMetadata[] axes)
     {
         _regionResult = regionResult;
         _axes = axes;

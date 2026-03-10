@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// The "crc32c" bytes-to-bytes codec (Zarr v3 spec).

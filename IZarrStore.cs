@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Store;
+namespace ZarrNET.Core.Zarr.Store;
 
 /// <summary>
 /// Pure key/value store abstraction. Keys are forward-slash-separated paths

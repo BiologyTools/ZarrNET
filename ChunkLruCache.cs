@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace OmeZarr.Core.Zarr.Store;
+namespace ZarrNET.Core.Zarr.Store;
 
 /// <summary>
 /// Thread-safe LRU cache for decoded chunk data, keyed by chunk path.

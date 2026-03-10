@@ -6,7 +6,7 @@ using Amazon.Runtime.CredentialManagement;
 using Amazon.S3;
 using Amazon.S3.Model;
 
-namespace OmeZarr.Core.Zarr.Store;
+namespace ZarrNET.Core.Zarr.Store;
 
 /// <summary>
 /// IZarrStore implementation backed by the AWS S3 SDK.

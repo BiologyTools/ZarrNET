@@ -1,7 +1,9 @@
-using OmeZarr.Core.OmeZarr;
 using OmeZarr.Core.OmeZarr.Helpers;
+using ZarrNET;
+using ZarrNET.Core;
+using ZarrNET.Core.OmeZarr;
 
-namespace OmeZarr
+namespace ZarrNET
 {
     public static class SimpleHttpTest
     {

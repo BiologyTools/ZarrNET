@@ -1,6 +1,8 @@
-using OmeZarr.Core.OmeZarr;
 using OmeZarr.Core.OmeZarr.Helpers;
-namespace OmeZarr
+using ZarrNET;
+using ZarrNET.Core;
+using ZarrNET.Core.OmeZarr;
+namespace ZarrNET
 {
     public static class QuickStartHttp
     {

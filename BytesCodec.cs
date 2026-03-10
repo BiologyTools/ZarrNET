@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// The "bytes" array-to-bytes codec (Zarr v3 spec section 3.3.2).

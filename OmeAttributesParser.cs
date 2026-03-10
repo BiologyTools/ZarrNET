@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OmeZarr.Core.OmeZarr.Metadata;
+namespace ZarrNET.Core.OmeZarr.Metadata;
 
 /// <summary>
 /// Detects the OME-Zarr node type from a raw attributes JsonElement and

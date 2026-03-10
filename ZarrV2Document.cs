@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace OmeZarr.Core.Zarr.Metadata;
+namespace ZarrNET;
 
 // =============================================================================
 // Zarr v2 .zarray document

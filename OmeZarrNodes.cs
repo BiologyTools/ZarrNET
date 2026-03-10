@@ -1,6 +1,9 @@
-using OmeZarr.Core.OmeZarr.Coordinates;
-using OmeZarr.Core.OmeZarr.Metadata;
-using OmeZarr.Core.Zarr;
+using OmeZarr.Core.OmeZarr;
+using OmeZarr.Core;
+using ZarrNET.Core.Zarr;
+using ZarrNET.Core.OmeZarr.Metadata;
+using ZarrNET.Core.OmeZarr.Nodes;
+using ZarrNET.Core.OmeZarr.Coordinates;
 
 namespace OmeZarr.Core.OmeZarr.Nodes;
 
@@ -213,6 +216,81 @@ public sealed class ResolutionLevelNode
             region.Shape.Select(s => (long)s).ToArray(),
             _array.Metadata.DataType.TypeString,
             EffectiveAxes);
+    }
+
+    /// <summary>
+    /// Reads a tile from this resolution level using pixel coordinates.
+    ///
+    /// Builds a full-rank PixelRegion from the XY tile parameters and the
+    /// per-axis t/c/z indices, then delegates to <see cref="ReadPixelRegionAsync"/>.
+    /// All coordinates are clamped to the array shape so edge tiles and
+    /// zero-size requests never produce an invalid region.
+    /// </summary>
+    /// <param name="tileOriginX">Tile origin X in pixels.</param>
+    /// <param name="tileOriginY">Tile origin Y in pixels.</param>
+    /// <param name="tileSizeX">Tile width in pixels.</param>
+    /// <param name="tileSizeY">Tile height in pixels.</param>
+    /// <param name="t">Timepoint index (0-based).</param>
+    /// <param name="c">Channel index (0-based).</param>
+    /// <param name="z">Z-slice index (0-based).</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task<RegionResult> ReadTileAsync(
+        int tileOriginX,
+        int tileOriginY,
+        int tileSizeX,
+        int tileSizeY,
+        int t = 0,
+        int c = 0,
+        int z = 0,
+        CancellationToken ct = default)
+    {
+        var axes  = EffectiveAxes;
+        var shape = Shape;
+
+        var start = new long[axes.Length];
+        var end   = new long[axes.Length];
+
+        for (int i = 0; i < axes.Length; i++)
+        {
+            long axisLen = shape[i];
+
+            switch (axes[i].Name.ToLowerInvariant())
+            {
+                case "t":
+                    start[i] = Math.Clamp(t, 0, Math.Max(0, axisLen - 1));
+                    end[i]   = start[i] + 1;
+                    break;
+
+                case "c":
+                    start[i] = Math.Clamp(c, 0, Math.Max(0, axisLen - 1));
+                    end[i]   = start[i] + 1;
+                    break;
+
+                case "z":
+                    start[i] = Math.Clamp(z, 0, Math.Max(0, axisLen - 1));
+                    end[i]   = start[i] + 1;
+                    break;
+
+                case "y":
+                    start[i] = Math.Clamp(tileOriginY, 0, Math.Max(0, axisLen - 1));
+                    end[i]   = Math.Min(axisLen, Math.Max(start[i] + 1, (long)tileOriginY + tileSizeY));
+                    break;
+
+                case "x":
+                    start[i] = Math.Clamp(tileOriginX, 0, Math.Max(0, axisLen - 1));
+                    end[i]   = Math.Min(axisLen, Math.Max(start[i] + 1, (long)tileOriginX + tileSizeX));
+                    break;
+
+                default:
+                    start[i] = 0;
+                    end[i]   = axisLen;
+                    break;
+            }
+        }
+
+        var region = new PixelRegion(start, end);
+
+        return await ReadPixelRegionAsync(region, ct: ct).ConfigureAwait(false);
     }
 
     /// <summary>

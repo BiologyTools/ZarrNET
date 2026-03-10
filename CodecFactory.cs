@@ -1,6 +1,5 @@
-using OmeZarr.Core.Zarr.Metadata;
 
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// Builds a CodecPipeline from the CodecInfo descriptors stored in ZarrArrayMetadata.
@@ -226,12 +225,12 @@ public static class CodecFactory
     /// </summary>
     internal static CodecInfo[] BuildV2CodecPipeline(
         ZarrV2CompressorDocument?           compressor,
-        Zarr.Codecs.ByteOrder  byteOrder)
+        ByteOrder  byteOrder)
     {
         var bytesCodec = new CodecInfo(
             "bytes",
             System.Text.Json.JsonSerializer.SerializeToElement(
-                new { endian = byteOrder == Zarr.Codecs.ByteOrder.BigEndian
+                new { endian = byteOrder == ByteOrder.BigEndian
                     ? "big"
                     : "little" }));
 

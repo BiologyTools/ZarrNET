@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Metadata;
+namespace ZarrNET;
 
 /// <summary>
 /// Typed representation of a Zarr v3 data type string (e.g. "uint8", "float32").

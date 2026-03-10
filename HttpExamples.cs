@@ -1,11 +1,13 @@
-using OmeZarr.Core.OmeZarr;
 using OmeZarr.Core.OmeZarr.Helpers;
-using OmeZarr.Core.Zarr.Store;
+using ZarrNET;
+using ZarrNET.Core;
+using ZarrNET.Core.OmeZarr;
+using ZarrNET.Core.Zarr.Store;
 
 // =============================================================================
 // Example 1 — Read from public HTTP URL
 // =============================================================================
-namespace OmeZarr
+namespace ZarrNET
 {
     public class Reader
     {
@@ -178,7 +180,7 @@ namespace OmeZarr
         var level = await image.OpenResolutionLevelAsync(0);
 
         // Read all data
-        var fullExtent = new OmeZarr.Core.OmeZarr.Coordinates.PixelRegion(
+        var fullExtent = new ZarrNET.Core.OmeZarr.Coordinates.PixelRegion(
             start: new long[level.Rank],
             end: level.Shape
         );
@@ -318,7 +320,7 @@ namespace OmeZarr
             var fullResY = y * scaleFactor;
 
             var cropSize = 512;
-            var cropRegion = new OmeZarr.Core.OmeZarr.Coordinates.PixelRegion(
+            var cropRegion = new ZarrNET.Core.OmeZarr.Coordinates.PixelRegion(
                 start: [0, 0, 0, Math.Max(0, fullResY - cropSize / 2), Math.Max(0, fullResX - cropSize / 2)],
                 end: [1, 1, 1, Math.Min(fullRes.Shape[3], fullResY + cropSize/2),
                          Math.Min(fullRes.Shape[4], fullResX + cropSize/2)]

@@ -1,7 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 
-namespace OmeZarr.Core.Zarr.Store;
+namespace ZarrNET.Core.Zarr.Store;
 
 /// <summary>
 /// IZarrStore implementation for reading Zarr datasets over HTTP/HTTPS.

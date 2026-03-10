@@ -3,7 +3,7 @@ using System.IO.Compression;
 using K4os.Compression.LZ4;
 using ZstdSharp;
 
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// Blosc bytes-to-bytes codec.

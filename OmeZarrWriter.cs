@@ -1,8 +1,10 @@
 using System.Text;
 using System.Text.Json;
-using OmeZarr.Core.OmeZarr.Metadata;
-using OmeZarr.Core.Zarr;
-using OmeZarr.Core.Zarr.Store;
+using OmeZarr.Core.OmeZarr;
+using ZarrNET;
+using ZarrNET.Core;
+using ZarrNET.Core.Zarr;
+using ZarrNET.Core.Zarr.Store;
 
 namespace OmeZarr.Core.OmeZarr;
 
@@ -14,20 +16,18 @@ namespace OmeZarr.Core.OmeZarr;
 /// Everything the writer needs to know about a 5D image being saved.
 /// Shape is always interpreted as (T, C, Z, Y, X) in this descriptor.
 /// The caller converts from their internal BioImage representation into this.
+/// All dimension sizes must be at least 1.
 /// </summary>
-public class BioImageDescriptor(
-    int sizeX,
-    int sizeY,
-    ZCT coord)
+public class BioImageDescriptor
 {
     public string  Name         { get; init; } = "image";
     public string  DataType     { get; init; } = "uint16";   // Zarr v3 data_type string
 
-    public int     SizeT        { get; init; } = coord.T;
-    public int     SizeC        { get; init; } = coord.C;
-    public int     SizeZ        { get; init; } = coord.Z;
-    public int     SizeY        { get; init; } = sizeY;
-    public int     SizeX        { get; init; } = sizeX;
+    public int     SizeT        { get; }
+    public int     SizeC        { get; }
+    public int     SizeZ        { get; }
+    public int     SizeY        { get; }
+    public int     SizeX        { get; }
 
     // Physical pixel sizes (µm). Used to populate coordinate transformations.
     public double  PhysicalSizeZ { get; init; } = 1.0;
@@ -43,6 +43,21 @@ public class BioImageDescriptor(
 
     public long[] Shape    => [SizeT, SizeC, SizeZ, SizeY, SizeX];
     public int[]  Chunks   => [ChunkT, ChunkC, ChunkZ, ChunkY, ChunkX];
+
+    public BioImageDescriptor(int sizeX, int sizeY, ZCT coord)
+    {
+        if (sizeX <= 0) throw new ArgumentOutOfRangeException(nameof(sizeX), sizeX, "SizeX must be > 0.");
+        if (sizeY <= 0) throw new ArgumentOutOfRangeException(nameof(sizeY), sizeY, "SizeY must be > 0.");
+        if (coord.Z <= 0) throw new ArgumentOutOfRangeException(nameof(coord), coord.Z, "SizeZ (coord.Z) must be > 0.");
+        if (coord.C <= 0) throw new ArgumentOutOfRangeException(nameof(coord), coord.C, "SizeC (coord.C) must be > 0.");
+        if (coord.T <= 0) throw new ArgumentOutOfRangeException(nameof(coord), coord.T, "SizeT (coord.T) must be > 0.");
+
+        SizeX = sizeX;
+        SizeY = sizeY;
+        SizeZ = coord.Z;
+        SizeC = coord.C;
+        SizeT = coord.T;
+    }
 }
 
 // =============================================================================
@@ -50,26 +65,17 @@ public class BioImageDescriptor(
 // =============================================================================
 
 /// <summary>
-/// Creates a new OME-Zarr v3 dataset and writes pixel data into it.
-///
-/// Supports writing to any IZarrStore backend: local filesystem, S3,
-/// or custom stores.
+/// Creates a new OME-Zarr v3 dataset on disk and writes pixel data into it.
 ///
 /// Writing always goes through two phases:
 ///   1. Bootstrap — write zarr.json metadata for the root group and each array.
 ///   2. Fill — open the bootstrapped arrays and stream pixel data in.
 ///
-/// Usage (local):
+/// Usage:
 /// <code>
 ///   var descriptor = new BioImageDescriptor { SizeY = 1024, SizeX = 1024, ... };
-///   await using var writer = await OmeZarrWriter.CreateAsync("/path/to/output.zarr", descriptor);
-///   await writer.WritePixelDataAsync(pixelBytes);
-/// </code>
 ///
-/// Usage (S3):
-/// <code>
-///   var store = new S3ZarrStore("s3://my-bucket/output.zarr", accessKey, secretKey, region);
-///   await using var writer = await OmeZarrWriter.CreateAsync(store, descriptor);
+///   await using var writer = OmeZarrWriter.Create("/path/to/output.zarr", descriptor);
 ///   await writer.WritePixelDataAsync(pixelBytes);
 /// </code>
 /// </summary>
@@ -102,25 +108,6 @@ public sealed class OmeZarrWriter : IAsyncDisposable
         Directory.CreateDirectory(outputPath);
 
         var store  = new LocalFileSystemStore(outputPath);
-        var writer = new OmeZarrWriter(store, descriptor);
-
-        await writer.BootstrapMetadataAsync(ct).ConfigureAwait(false);
-
-        return writer;
-    }
-
-    /// <summary>
-    /// Creates OME-Zarr metadata in the provided store and returns a writer
-    /// ready to receive pixel data. Use this overload to write directly to
-    /// S3 or any other IZarrStore backend without local staging.
-    ///
-    /// The writer takes ownership of the store and will dispose it.
-    /// </summary>
-    public static async Task<OmeZarrWriter> CreateAsync(
-        IZarrStore          store,
-        BioImageDescriptor  descriptor,
-        CancellationToken   ct = default)
-    {
         var writer = new OmeZarrWriter(store, descriptor);
 
         await writer.BootstrapMetadataAsync(ct).ConfigureAwait(false);
@@ -170,6 +157,34 @@ public sealed class OmeZarrWriter : IAsyncDisposable
         var regionEnd   = new long[] { d.SizeT, d.SizeC, zIndex + 1, d.SizeY, d.SizeX };
 
         await arr.WriteRegionAsync(regionStart, regionEnd, planeData, ct)
+                 .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Writes an arbitrary sub-region into the 5D array.
+    ///
+    /// This is the tile-friendly entry point: callers can write a single
+    /// (t, c, z) tile of size (height × width) at any YX offset without
+    /// needing to hold a full plane in memory.
+    ///
+    /// <paramref name="data"/> must contain exactly
+    /// height × width × ElementSizeBytes bytes in C-order.
+    /// </summary>
+    public async Task WriteRegionAsync(
+        int    t,       int c,      int z,
+        int    yOffset, int xOffset,
+        int    height,  int width,
+        byte[] data,
+        CancellationToken ct = default)
+    {
+        ThrowIfDisposed();
+
+        var arr = await OpenArrayAsync(ct).ConfigureAwait(false);
+
+        var regionStart = new long[] { t,     c,     z,     yOffset,          xOffset };
+        var regionEnd   = new long[] { t + 1, c + 1, z + 1, yOffset + height, xOffset + width };
+
+        await arr.WriteRegionAsync(regionStart, regionEnd, data, ct)
                  .ConfigureAwait(false);
     }
 
@@ -241,6 +256,11 @@ public sealed class OmeZarrWriter : IAsyncDisposable
     {
         var d = _descriptor;
 
+        // Element size drives the Blosc shuffle typesize — must match the
+        // data type so that shuffle/unshuffle transposes at the correct
+        // element boundary (e.g. 2 for uint16, 4 for float32).
+        var elementSize = ZarrDataType.Parse(d.DataType).ElementSize;
+
         // NGFF 0.5 requires dimension_names in array metadata (MUST).
         // These must match the axes declared in the multiscales metadata.
         var arrayDoc = new
@@ -266,7 +286,14 @@ public sealed class OmeZarrWriter : IAsyncDisposable
                 new
                 {
                     name          = "blosc",
-                    configuration = new { cname = "lz4", clevel = 5, shuffle = "bitshuffle" }
+                    configuration = new
+                    {
+                        cname     = "lz4",
+                        clevel    = 5,
+                        shuffle   = "byteshuffle",
+                        typesize  = elementSize,
+                        blocksize = 0
+                    }
                 }
             }
         };

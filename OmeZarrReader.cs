@@ -1,9 +1,11 @@
-using OmeZarr.Core.OmeZarr.Metadata;
 using OmeZarr.Core.OmeZarr.Nodes;
-using OmeZarr.Core.Zarr;
-using OmeZarr.Core.Zarr.Store;
+using ZarrNET.Core.OmeZarr;
+using ZarrNET.Core.OmeZarr.Metadata;
+using ZarrNET.Core.OmeZarr.Nodes;
+using ZarrNET.Core.Zarr;
+using ZarrNET.Core.Zarr.Store;
 
-namespace OmeZarr.Core.OmeZarr;
+namespace ZarrNET.Core;
 
 /// <summary>
 /// Entry point for reading OME-Zarr datasets.
@@ -30,7 +32,7 @@ public sealed class OmeZarrReader : IAsyncDisposable
     private readonly IZarrStore  _store;
     private readonly ZarrGroup   _rootGroup;
     private readonly System.Text.Json.JsonElement? _omeGroupAttributes;  // only for bioformats2raw
-    private readonly Metadata.OmeXmlMetadata?      _omeXml;              // only for bioformats2raw
+    private readonly Core.OmeZarr.Metadata.OmeXmlMetadata?      _omeXml;              // only for bioformats2raw
     private bool                 _disposed;
 
     public OmeAttributesParser.OmeNodeType RootNodeType { get; }
@@ -49,7 +51,7 @@ public sealed class OmeZarrReader : IAsyncDisposable
         OmeAttributesParser.OmeNodeType rootNodeType,
         string?     ngffVersion,
         System.Text.Json.JsonElement? omeGroupAttributes = null,
-        Metadata.OmeXmlMetadata?      omeXml = null)
+        Core.OmeZarr.Metadata.OmeXmlMetadata?      omeXml = null)
     {
         _store                = store;
         _rootGroup            = rootGroup;
@@ -92,7 +94,7 @@ public sealed class OmeZarrReader : IAsyncDisposable
             // For bioformats2raw layouts, pre-load the OME sub-group attributes
             // and METADATA.ome.xml so the collection metadata is ready at construction time
             System.Text.Json.JsonElement? omeGroupAttributes = null;
-            Metadata.OmeXmlMetadata?      omeXml = null;
+            Core.OmeZarr.Metadata.OmeXmlMetadata?      omeXml = null;
 
             if (nodeType == OmeAttributesParser.OmeNodeType.Bioformats2RawCollection)
             {
@@ -124,7 +126,7 @@ public sealed class OmeZarrReader : IAsyncDisposable
         var ngffVersion = OmeAttributesParser.DetectNgffVersion(attributes);
 
         System.Text.Json.JsonElement? omeGroupAttributes = null;
-        Metadata.OmeXmlMetadata?      omeXml = null;
+        Core.OmeZarr.Metadata.OmeXmlMetadata?      omeXml = null;
 
         if (nodeType == OmeAttributesParser.OmeNodeType.Bioformats2RawCollection)
         {
@@ -329,14 +331,14 @@ public sealed class OmeZarrReader : IAsyncDisposable
     /// Both are optional per the spec. Failures reading either one do not
     /// prevent the other from being returned — they degrade independently.
     /// </summary>
-    private static async Task<(System.Text.Json.JsonElement? OmeGroupAttributes, Metadata.OmeXmlMetadata? OmeXml)>
+    private static async Task<(System.Text.Json.JsonElement? OmeGroupAttributes, Core.OmeZarr.Metadata.OmeXmlMetadata? OmeXml)>
         ReadBioformats2RawOmeDataAsync(
             IZarrStore        store,
             ZarrGroup         rootGroup,
             CancellationToken ct)
     {
         System.Text.Json.JsonElement? omeGroupAttributes = null;
-        Metadata.OmeXmlMetadata?      omeXml = null;
+        Core.OmeZarr.Metadata.OmeXmlMetadata?      omeXml = null;
 
         // Check for the OME sub-group
         bool hasOmeGroup;
@@ -369,7 +371,7 @@ public sealed class OmeZarrReader : IAsyncDisposable
             var xmlBytes = await store.ReadAsync("OME/METADATA.ome.xml", ct).ConfigureAwait(false);
             if (xmlBytes is not null)
             {
-                omeXml = Metadata.OmeXmlParser.TryParse(xmlBytes);
+                omeXml = Core.OmeZarr.Metadata.OmeXmlParser.TryParse(xmlBytes);
             }
         }
         catch

@@ -1,4 +1,4 @@
-namespace OmeZarr.Core.Zarr.Codecs;
+namespace ZarrNET;
 
 /// <summary>
 /// Applies an ordered list of codecs as a pipeline.
