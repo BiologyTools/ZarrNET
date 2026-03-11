@@ -12,7 +12,7 @@
 	<PackageRequireLicenseAcceptance>True</PackageRequireLicenseAcceptance>
 	<PackageProjectUrl>https://biologytools.github.io/</PackageProjectUrl>
 	<PackageTags>Biology; Microscopy; Whole-Slide-Image; Zarr; OME-Zarr; NGFF;</PackageTags>
-	<PackageReleaseNotes>Added support for AWS S3 links.</PackageReleaseNotes>
+	<PackageReleaseNotes>Added support for AWS S3 links. Fxed issue with writing Zarr.</PackageReleaseNotes>
 	<GeneratePackageOnBuild>True</GeneratePackageOnBuild>
 	<Authors>Erik Repo</Authors>
 	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
@@ -20,13 +20,6 @@
 	<PackageReadmeFile>README.md</PackageReadmeFile>
 	<PackageIcon>icon.png</PackageIcon>
   </PropertyGroup>
-
-  <ItemGroup>
-    <None Include="..\icon.png">
-      <Pack>True</Pack>
-      <PackagePath>\</PackagePath>
-    </None>
-  </ItemGroup>
   <ItemGroup>
     <PackageReference Include="AWSSDK.Core" Version="4.0.3.15" />
     <PackageReference Include="AWSSDK.S3" Version="4.0.18.7" />
@@ -34,6 +27,10 @@
     <PackageReference Include="ZstdSharp.Port" Version="0.8.7" />
   </ItemGroup>
   <ItemGroup>
+    <None Update="icon.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
     <None Update="README.md">
       <Pack>True</Pack>
       <PackagePath>\</PackagePath>
