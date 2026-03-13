@@ -21,7 +21,7 @@ A high-performance, fully async C# library for reading and writing OME-Zarr data
 dotnet add package ZarrNET
 
 # Or clone and build locally
-git clone https://github.com/yBiologyTools/ZarrNET.git
+git clone https://github.com/BiologyTools/Zarr.NET.git
 cd ZarrNET
 dotnet build
 ```
