@@ -101,7 +101,7 @@ public sealed class ZarrArray
         await Parallel.ForEachAsync(chunkCoords, options, async (chunkCoord, token) =>
         {
             var chunkData = await ReadChunkAsync(chunkCoord, shardCache, token).ConfigureAwait(false);
-
+            if (chunkData != null)
             CopyChunkRegionToOutput(
                 chunkCoord,
                 chunkData,

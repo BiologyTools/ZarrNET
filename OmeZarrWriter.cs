@@ -46,12 +46,6 @@ public class BioImageDescriptor
 
     public BioImageDescriptor(int sizeX, int sizeY, ZCT coord)
     {
-        if (sizeX <= 0) throw new ArgumentOutOfRangeException(nameof(sizeX), sizeX, "SizeX must be > 0.");
-        if (sizeY <= 0) throw new ArgumentOutOfRangeException(nameof(sizeY), sizeY, "SizeY must be > 0.");
-        if (coord.Z <= 0) throw new ArgumentOutOfRangeException(nameof(coord), coord.Z, "SizeZ (coord.Z) must be > 0.");
-        if (coord.C <= 0) throw new ArgumentOutOfRangeException(nameof(coord), coord.C, "SizeC (coord.C) must be > 0.");
-        if (coord.T <= 0) throw new ArgumentOutOfRangeException(nameof(coord), coord.T, "SizeT (coord.T) must be > 0.");
-
         SizeX = sizeX;
         SizeY = sizeY;
         SizeZ = coord.Z;

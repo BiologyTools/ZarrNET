@@ -27,7 +27,7 @@ namespace ZarrNET.Core;
 ///   var level = await field.OpenResolutionLevelAsync();
 /// </code>
 /// </summary>
-public sealed class OmeZarrReader : IAsyncDisposable
+public sealed class OmeZarrReader : IAsyncDisposable, IDisposable
 {
     private readonly IZarrStore  _store;
     private readonly ZarrGroup   _rootGroup;
@@ -452,5 +452,12 @@ public sealed class OmeZarrReader : IAsyncDisposable
 
         _disposed = true;
         await _store.DisposeAsync().ConfigureAwait(false);
+    }
+    public void Dispose()
+    {
+        if (_disposed)
+            return;
+        _disposed = true;
+        _store.DisposeAsync().ConfigureAwait(false);
     }
 }

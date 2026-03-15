@@ -272,9 +272,10 @@ public sealed class S3ZarrStore : IZarrStore
     // =========================================================================
     // IZarrStore — Read  (hot path — optimised for parallel chunk fetching)
     // =========================================================================
-
+    int retry = 0;
     public async Task<byte[]?> ReadAsync(string key, CancellationToken ct = default)
     {
+    start:
         ThrowIfDisposed();
 
         var isMetadata = IsMetadataKey(key);
@@ -344,16 +345,23 @@ public sealed class S3ZarrStore : IZarrStore
         {
             if (isMetadata)
                 s_metadataCache[cacheKey] = null;
-
             return null;
         }
         catch (AmazonS3Exception ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
         {
             if (isMetadata)
                 s_metadataCache[cacheKey] = null;
-
             return null;
         }
+        catch (Exception ex)
+        {
+            CreateDefaultAwsClient();
+            if (retry < 3)
+                return null;
+            retry++;
+            goto start;
+        }
+        
     }
 
     // =========================================================================
